@@ -1,9 +1,15 @@
 use crossbeam::crossbeam_channel::{
-    select, unbounded as cross_unbounded, Receiver as CrossReceiver, RecvError,
-    Sender as CrossSender,
+    select,
+    unbounded as cross_unbounded,
+    Receiver as CrossReceiver,
+    RecvError,
+    Sender as CrossSender
 };
 
-use crate::{FortunaIsolate, JSEnv};
+use crate::{
+    FortunaIsolate,
+    JSEnv
+};
 use std::fmt::Debug;
 use std::thread;
 
@@ -18,20 +24,20 @@ pub enum Ops {
     REWRITE,
     EVAL,
     CALL,
-    EXIT,
+    EXIT
 }
 
 #[derive(Debug)]
 pub struct Command {
     pub operation: Ops,
     pub payload: String,
-    pub args: Vec<String>,
+    pub args: Vec<String>
 }
 
 struct JSServer {
     send: ServerTx,
     receive: ServerRx,
-    isolate: FortunaIsolate,
+    isolate: FortunaIsolate
 }
 
 impl JSServer {
@@ -41,7 +47,7 @@ impl JSServer {
             let mut server = JSServer {
                 receive,
                 send,
-                isolate: FortunaIsolate::new_from_snapshot(data.as_slice()),
+                isolate: FortunaIsolate::new_from_snapshot(data.as_slice())
             };
 
             loop {
@@ -97,7 +103,7 @@ impl JSServer {
 #[derive(Clone)]
 pub struct JSClient {
     pub tx: ClientTx,
-    pub rx: ClientRx,
+    pub rx: ClientRx
 }
 
 impl JSClient {

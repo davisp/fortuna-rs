@@ -1,4 +1,7 @@
-use futures::{stream, StreamExt};
+use futures::{
+    stream,
+    StreamExt
+};
 use reqwest::Client;
 
 use ateles::JsRequest;
@@ -22,7 +25,7 @@ async fn rewrite_map_funs(client: &Client) {
         action: 0,
         script: "rewriteFun".to_string(),
         args: vec!["\"function(doc) {emit(doc._id, null);}\"".to_string()],
-        timeout: 5000,
+        timeout: 5000
     };
 
     let mut resp = Vec::<u8>::new();
@@ -44,7 +47,7 @@ async fn add_map_js(client: &Client) {
         action: 1,
         script: MAP_JS.to_string(),
         args: vec!["file=map.js".to_string(), "line=1".to_string()],
-        timeout: 5000,
+        timeout: 5000
     };
 
     let mut resp = Vec::<u8>::new();
@@ -66,7 +69,7 @@ async fn init_map(client: &Client) {
         action: 2,
         script: "init".to_string(),
         args: vec!["{}".to_string(), MAP_FUNS.to_string()],
-        timeout: 5000,
+        timeout: 5000
     };
 
     let mut resp = Vec::<u8>::new();
@@ -88,7 +91,7 @@ async fn map_doc(client: &Client, doc: &str) {
         action: 2,
         script: "mapDoc".to_string(),
         args: vec![doc.to_string()],
-        timeout: 5000,
+        timeout: 5000
     };
 
     let mut resp = Vec::<u8>::new();
@@ -108,22 +111,18 @@ async fn map_doc(client: &Client, doc: &str) {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
-    let reqs = 0..1000;
-    // let doc = fs::read_to_string("test.json")?;
 
-    let fetches = stream::iter(reqs.map(|_| {
-        async {
-            let docs = 0..100;
-            let client = Client::new();
-            add_map_js(&client).await;
-            init_map(&client).await;
-            let doc_fetches = stream::iter(docs.map(|_| async {
-                map_doc(&client, DOC).await;
-            }))
-            .buffer_unordered(1)
-            .collect::<Vec<()>>();
-            doc_fetches.await;
-        }
+    let fetches = stream::iter((0..1000).map(|_| async {
+        let docs = 0..100;
+        let client = Client::new();
+        add_map_js(&client).await;
+        init_map(&client).await;
+        let doc_fetches = stream::iter(docs.map(|_| async {
+            map_doc(&client, DOC).await;
+        }))
+        .buffer_unordered(1)
+        .collect::<Vec<()>>();
+        doc_fetches.await;
     }))
     .buffer_unordered(60)
     .collect::<Vec<()>>();

@@ -6,7 +6,6 @@ use reqwest::Client;
 
 use ateles::JsRequest;
 use prost::Message;
-use std::fs;
 use std::time::Instant;
 
 pub mod ateles {

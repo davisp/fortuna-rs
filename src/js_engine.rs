@@ -16,6 +16,20 @@ pub struct JSEnv {
     pub startup_data: Vec<u8>
 }
 
+pub fn init() {
+    let platform = v8::new_default_platform().unwrap();
+    v8::V8::initialize_platform(platform);
+    v8::V8::initialize();
+}
+
+// Not really needed
+pub fn shutdown() {
+    unsafe {
+        v8::V8::shutdown_platform();
+        v8::V8::dispose();
+    }
+}
+
 pub fn print() {
     println!("hello");
 }
@@ -159,19 +173,5 @@ impl FortunaIsolate {
         let result_string = result.to_rust_string_lossy(scope);
         // println!("result: {}", result_string);
         result_string
-    }
-}
-
-pub fn init() {
-    let platform = v8::new_default_platform().unwrap();
-    v8::V8::initialize_platform(platform);
-    v8::V8::initialize();
-}
-
-// Not really needed
-pub fn shutdown() {
-    unsafe {
-        v8::V8::shutdown_platform();
-        v8::V8::dispose();
     }
 }

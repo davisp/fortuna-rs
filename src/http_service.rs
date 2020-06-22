@@ -3,8 +3,8 @@ use std::task::Context;
 use std::task::Poll;
 use std::time::Instant;
 
-use ateles::JSRequest;
-use ateles::JSResponse;
+use ateles::JsRequest;
+use ateles::JsResponse;
 
 use futures_util::future;
 
@@ -23,7 +23,7 @@ use crate::js_server::create_js_env;
 use crate::js_server::Command;
 use crate::js_server::JSClient;
 use crate::js_server::Ops;
-use crate::JSEnv;
+use crate::js_engine::JSEnv;
 
 pub mod ateles {
     // The string specified here must match the proto package name
@@ -128,10 +128,7 @@ impl<T> Service<T> for MakeService {
     type Error = std::io::Error;
     type Future = future::Ready<Result<Self::Response, Self::Error>>;
 
-    fn poll_ready(
-        &mut self,
-        _cx: &mut Context<'_>
-    ) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Ok(()).into()
     }
 

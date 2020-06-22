@@ -1,17 +1,14 @@
-use crossbeam::crossbeam_channel::{
-    select,
-    unbounded as cross_unbounded,
-    Receiver as CrossReceiver,
-    RecvError,
-    Sender as CrossSender
-};
-
-use crate::{
-    FortunaIsolate,
-    JSEnv
-};
 use std::fmt::Debug;
 use std::thread;
+
+use crossbeam::crossbeam_channel::select;
+use crossbeam::crossbeam_channel::unbounded as cross_unbounded;
+use crossbeam::crossbeam_channel::Receiver as CrossReceiver;
+use crossbeam::crossbeam_channel::RecvError;
+use crossbeam::crossbeam_channel::Sender as CrossSender;
+
+use crate::js_engine::FortunaIsolate;
+use crate::js_engine::JSEnv;
 
 type ServerTx = CrossSender<String>;
 type ServerRx = CrossReceiver<Command>;

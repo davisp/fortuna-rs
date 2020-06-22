@@ -2,15 +2,8 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{
-    Arc,
-    Mutex
-};
-use std::task::{
-    Context,
-    Poll,
-    Waker
-};
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
 use std::thread;
 
 use crossbeam::crossbeam_channel as cbc;

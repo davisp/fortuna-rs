@@ -1,7 +1,4 @@
-use fortuna::{
-    init_v8,
-    run_server
-};
+use fortuna::{init_v8, run_server};
 
 #[tokio::main(core_threads = 4)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

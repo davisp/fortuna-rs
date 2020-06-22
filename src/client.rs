@@ -1,7 +1,4 @@
-use futures::{
-    stream,
-    StreamExt
-};
+use futures::{stream, StreamExt};
 use reqwest::Client;
 
 use ateles::JsRequest;

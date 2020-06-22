@@ -4,18 +4,8 @@ use std::time::Instant;
 use crate::js::ateles::JsRequest;
 use crate::js::ateles::JsResponse;
 
-use hyper::service::{
-    make_service_fn,
-    service_fn
-};
-use hyper::{
-    Body,
-    Method,
-    Request,
-    Response,
-    Server,
-    StatusCode
-};
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 use prost::Message;
 

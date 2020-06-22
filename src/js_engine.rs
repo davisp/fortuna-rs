@@ -12,6 +12,7 @@ pub struct FortunaIsolate {
     global_context: v8::Global<v8::Context>
 }
 
+#[derive(Clone)]
 pub struct JSEnv {
     pub startup_data: Vec<u8>
 }

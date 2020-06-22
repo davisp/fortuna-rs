@@ -22,7 +22,7 @@ fn create_js_src_file() -> Result<(), Box<dyn std::error::Error>> {
         .collect::<Vec<String>>()
         .join("\n\n");
 
-    let js = format!("pub const JS_CODE: &str = r#\n\"{}\"\n#;", scripts);
+    let js = format!("pub const JS_CODE: &str = r#\"\n{}\n\"#;", scripts);
 
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest = Path::new(&out_dir).join("js_code.rs");

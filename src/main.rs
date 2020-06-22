@@ -1,17 +1,15 @@
 use fortuna::{
-    create_server,
-    init_v8
+    init_v8,
+    run_server
 };
 
 #[tokio::main(core_threads = 6)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    pretty_env_logger::init();
+
     init_v8();
     let addr = "127.0.0.1:8444".parse()?;
-    let server = create_server(&addr);
-
-    println!("Listening on http://{}", addr);
-
-    server.await?;
+    run_server(&addr).await?;
 
     Ok(())
 }

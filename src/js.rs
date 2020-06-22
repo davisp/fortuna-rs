@@ -20,6 +20,8 @@ pub mod ateles {
 // a byte array
 include!(concat!(env!("OUT_DIR"), "/js_code.rs"));
 
+pub type JSResult = Result<String, String>;
+
 #[derive(Clone, Debug)]
 pub enum Ops {
     REWRITE,
@@ -35,15 +37,9 @@ pub struct JSCommand {
     pub args: Vec<String>
 }
 
-#[derive(Debug)]
-pub enum JSResult {
-    Waiting,
-    Ok(String),
-    Error(String)
-}
-
 pub struct JSFutureState {
     cmd: JSCommand,
+    completed: bool,
     result: JSResult,
     waker: Option<Waker>
 }
@@ -99,7 +95,8 @@ impl JSFuture {
     pub fn new(cmd: JSCommand) -> Self {
         let state = Arc::new(Mutex::new(JSFutureState {
             cmd,
-            result: JSResult::Waiting,
+            completed: false,
+            result: Result::Err(String::from("<waiting>")),
             waker: None
         }));
 
@@ -111,13 +108,11 @@ impl Future for JSFuture {
     type Output = JSResult;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut state = self.state.lock().unwrap();
-        match &state.result {
-            JSResult::Ok(data) => Poll::Ready(JSResult::Ok(data.clone())),
-            JSResult::Error(data) => Poll::Ready(JSResult::Error(data.clone())),
-            JSResult::Waiting => {
-                state.waker = Some(cx.waker().clone());
-                Poll::Pending
-            }
+        if state.completed {
+            Poll::Ready(state.result.clone())
+        } else {
+            state.waker = Some(cx.waker().clone());
+            Poll::Pending
         }
     }
 }
@@ -130,7 +125,8 @@ impl JSEnv {
         }
     }
 
-    // adapted from Deno https://github.com/denoland/rusty_v8/blob/master/tests/test_api.rs#L1714
+    // Adapted from Deno:
+    // https://github.com/denoland/rusty_v8/blob/master/tests/test_api.rs#L1714
     fn create_startup_data() -> v8::StartupData {
         let mut snapshot_creator = v8::SnapshotCreator::new(None);
         {
@@ -160,18 +156,14 @@ impl JSEnv {
 }
 
 impl FortunaIsolate {
-    pub fn new_from_snapshot(data: &[u8]) -> FortunaIsolate {
-        FortunaIsolate::create_isolate(data.to_vec())
-    }
-
-    fn create_isolate(startup_data: Vec<u8>) -> FortunaIsolate {
+    pub fn new_from_snapshot(snapshot: &[u8]) -> Self {
         let mut global_context = v8::Global::<v8::Context>::new();
-        let create_params =
-            v8::Isolate::create_params().snapshot_blob(startup_data);
-        let mut isolate = v8::Isolate::new(create_params);
+        let params = v8::Isolate::create_params();
+        let params = params.snapshot_blob(snapshot.to_vec());
+        let mut isolate = v8::Isolate::new(params);
 
-        let mut handle_scope = v8::HandleScope::new(&mut isolate);
-        let scope = handle_scope.enter();
+        let mut scope = v8::HandleScope::new(&mut isolate);
+        let scope = scope.enter();
 
         let context = v8::Context::new(scope);
 
@@ -183,59 +175,84 @@ impl FortunaIsolate {
         }
     }
 
-    pub fn eval(&mut self, script_str: &str, _args: &[String]) -> String {
-        let mut hs = v8::HandleScope::new(&mut self.isolate);
-        let scope = hs.enter();
-        let context = self.global_context.get(scope).unwrap();
+    pub fn eval(
+        &mut self,
+        script_str: &str,
+        _args: &[String]
+    ) -> JSResult {
+        let mut scope = v8::HandleScope::new(&mut self.isolate);
+        let scope = scope.enter();
+
+        let context = self
+            .global_context
+            .get(scope)
+            .ok_or("error getting context")?;
 
         let mut cs = v8::ContextScope::new(scope, context);
         let scope = cs.enter();
 
-        let source = v8::String::new(scope, script_str).unwrap();
-        let mut script =
-            v8::Script::compile(scope, context, source, None).unwrap();
+        let source = v8::String::new(scope, script_str)
+            .ok_or("error creating string")?;
 
-        let result = script.run(scope, context).unwrap();
-        let result = v8::json::stringify(context, result).unwrap();
+        let mut script = v8::Script::compile(scope, context, source, None)
+            .ok_or("error compiling script")?;
+
+        let result =
+            script.run(scope, context).ok_or("error running script")?;
+        let result = v8::json::stringify(context, result)
+            .ok_or("error encoding result as JSON")?;
         let result = result.to_rust_string_lossy(scope);
 
         if result == "undefined" {
-            return "null".to_string();
+            return Result::Err("null".to_string());
         }
 
-        result
+        Result::Ok(result)
     }
 
-    pub fn call(&mut self, raw_fun_name: &str, args: &[String]) -> String {
-        let mut hs = v8::HandleScope::new(&mut self.isolate);
-        let scope = hs.enter();
+    pub fn call(
+        &mut self,
+        func_name: &str,
+        args: &[String]
+    ) -> JSResult {
+        let mut scope = v8::HandleScope::new(&mut self.isolate);
+        let scope = scope.enter();
 
-        let context = self.global_context.get(scope).unwrap();
-        let mut cs = v8::ContextScope::new(scope, context);
-        let scope = cs.enter();
+        let context = self
+            .global_context
+            .get(scope)
+            .ok_or("error getting context")?;
+
+        let mut scope = v8::ContextScope::new(scope, context);
+        let scope = scope.enter();
 
         let global = context.global(scope);
 
-        let name = v8::String::new(scope, raw_fun_name).unwrap();
-        let func = global.get(scope, context, name.into()).unwrap();
-        let func = v8::Local::<v8::Function>::try_from(func).unwrap();
-        let receiver = context.global(scope);
+        let name = v8::String::new(scope, func_name)
+            .ok_or("error creating function name string")?;
 
-        let args: Vec<v8::Local<v8::Value>> = args
-            .iter()
-            .map(|arg| {
-                let arg = v8::String::new(scope, arg).unwrap();
-                v8::Local::<v8::Value>::try_from(arg).unwrap()
-            })
-            .collect();
+        let func = global
+            .get(scope, context, name.into())
+            .ok_or(format!("function '{}' not found", func_name))?;
+        let func = v8::Local::<v8::Function>::try_from(func).ok()
+            .ok_or(format!("'{}' is not a function", func_name))?;
+
+        let mut js_args: Vec<v8::Local<v8::Value>> = Vec::new();
+        js_args.reserve_exact(args.len());
+        for arg in args.iter() {
+            let arg = v8::String::new(scope, arg).ok_or("error creating argument")?;
+            let arg = v8::Local::<v8::Value>::try_from(arg).unwrap();
+            js_args.push(arg);
+        }
 
         let resp = func
-            .call(scope, context, receiver.into(), args.as_slice())
-            .unwrap();
+            .call(scope, context, global.into(), js_args.as_slice())
+            .ok_or(format!("error calling '{}'", func_name))?;
 
-        let result = v8::json::stringify(context, resp).unwrap();
+        let result = v8::json::stringify(context, resp)
+            .ok_or("error converting result to JSON")?;
 
-        result.to_rust_string_lossy(scope)
+        Result::Ok(result.to_rust_string_lossy(scope))
     }
 }
 
@@ -255,6 +272,7 @@ impl JSServer {
     fn run(&mut self) {
         while let Ok(fut) = self.receiver.recv() {
             let mut state = fut.state.lock().unwrap();
+            state.completed = true;
             state.result = self.process(state.cmd.clone());
             if let Some(waker) = state.waker.take() {
                 waker.wake()
@@ -264,7 +282,7 @@ impl JSServer {
 
     fn process(&mut self, cmd: JSCommand) -> JSResult {
         match cmd.operation {
-            Ops::EXIT => JSResult::Error(String::from("exiting")),
+            Ops::EXIT => Result::Err(String::from("exiting")),
             Ops::EVAL => self.eval(cmd.payload),
             Ops::CALL => self.call(cmd.payload, cmd.args.as_slice()),
             Ops::REWRITE => self.call(cmd.payload, cmd.args.as_slice())
@@ -272,13 +290,11 @@ impl JSServer {
     }
 
     fn eval(&mut self, script: String) -> JSResult {
-        let resp = self.isolate.eval(script.as_str(), &[]);
-        JSResult::Ok(resp)
+        self.isolate.eval(script.as_str(), &[])
     }
 
     fn call(&mut self, fun_name: String, args: &[String]) -> JSResult {
-        let resp = self.isolate.call(fun_name.as_str(), args);
-        JSResult::Ok(resp)
+        self.isolate.call(fun_name.as_str(), args)
     }
 }
 

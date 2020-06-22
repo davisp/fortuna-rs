@@ -29,19 +29,11 @@ async fn serve(client: JSClient, req: Request<Body>) -> Result<Response<Body>> {
             let full_body = hyper::body::to_bytes(req.into_body()).await?;
             let js_request = JsRequest::decode(full_body).unwrap();
             let cmd: JSCommand = js_request.clone().into();
-            let resp = client.run(cmd.clone()).await;
-            let js_resp = match resp {
-                JSResult::Ok(data) => JsResponse {
-                    status: 0,
-                    result: data
-                },
-                JSResult::Error(data) => JsResponse {
-                    status: 1,
-                    result: data
-                },
-                _ => JsResponse {
-                    status: 1,
-                    result: String::from("unknown error")
+            let result = client.run(cmd.clone()).await;
+            let js_resp = match result {
+                JSResult::Ok(result) => JsResponse { status: 0, result },
+                JSResult::Err(result) => {
+                    JsResponse { status: 1, result }
                 }
             };
 
@@ -75,6 +67,6 @@ pub async fn run_server(
     });
 
     let server = Server::bind(&addr).serve(make_service);
-    println!("Listening on http://{}", addr);
+    info!("Listening on http://{}", addr);
     server.await
 }

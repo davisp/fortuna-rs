@@ -1,44 +1,32 @@
 use std::net::SocketAddr;
 use std::time::Instant;
 
-use ateles::JsRequest;
-use ateles::JsResponse;
+use crate::js::ateles::JsRequest;
+use crate::js::ateles::JsResponse;
 
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use hyper::service::{
+    make_service_fn,
+    service_fn
+};
+use hyper::{
+    Body,
+    Method,
+    Request,
+    Response,
+    Server,
+    StatusCode
+};
 
 use prost::Message;
 
-use crate::js_server::create_js_env;
-use crate::js_server::Command;
-use crate::js_server::JSClient;
-use crate::js_server::Ops;
-use crate::js_engine::JSEnv;
+use crate::js::JSEnv;
+use crate::js::create_js_env;
+use crate::js::JSCommand;
+use crate::js::JSClient;
+use crate::js::JSResult;
 
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
 type Result<T> = std::result::Result<T, GenericError>;
-
-pub mod ateles {
-    // The string specified here must match the proto package name
-    tonic::include_proto!("ateles");
-}
-
-impl From<ateles::JsRequest> for Command {
-    fn from(js_request: JsRequest) -> Self {
-        let op = match js_request.action {
-            0 => Ops::REWRITE,
-            1 => Ops::EVAL,
-            2 => Ops::CALL,
-            _ => Ops::EXIT
-        };
-        Command {
-            operation: op,
-            payload: js_request.script,
-            args: js_request.args
-        }
-    }
-}
-
 
 async fn serve(client: JSClient, req: Request<Body>) -> Result<Response<Body>> {
     match (req.method(), req.uri().path()) {
@@ -51,20 +39,26 @@ async fn serve(client: JSClient, req: Request<Body>) -> Result<Response<Body>> {
 
             let full_body = hyper::body::to_bytes(req.into_body()).await?;
             let js_request = JsRequest::decode(full_body).unwrap();
-            let cmd: Command = js_request.clone().into();
-            let resp = client.run(js_request.into());
-            let js_resp = JsResponse {
-                status: 0,
-                result: resp
+            let cmd: JSCommand = js_request.clone().into();
+            let resp = client.run(cmd.clone()).await;
+            let js_resp = match resp {
+                JSResult::Ok(data) => JsResponse {
+                        status: 0,
+                        result: data
+                    },
+                JSResult::Error(data) => JsResponse {
+                        status: 1,
+                        result: data
+                    },
+                _ => JsResponse {
+                        status: 1,
+                        result: String::from("unknown error")
+                    }
             };
 
             let mut resp: Vec<u8> = Vec::new();
             js_resp.encode(&mut resp).unwrap();
-            println!(
-                "request {:?} took {:?}",
-                cmd.operation,
-                start.elapsed()
-            );
+            println!("request {:?} took {:?}", cmd.operation, start.elapsed());
             Ok(Response::new(Body::from(resp)))
         }
         _ => {
@@ -75,12 +69,14 @@ async fn serve(client: JSClient, req: Request<Body>) -> Result<Response<Body>> {
     }
 }
 
-pub async fn run_server(addr: &SocketAddr) -> std::result::Result<(), hyper::Error> {
+pub async fn run_server(
+    addr: &SocketAddr
+) -> std::result::Result<(), hyper::Error> {
     let jsenv = JSEnv::new();
 
     let make_service = make_service_fn(move |_| {
-        let svc_jsenv = jsenv.clone();
-        let client = create_js_env(&svc_jsenv);
+        let jsenv = jsenv.clone();
+        let client = create_js_env(&jsenv);
 
         async move {
             Ok::<_, GenericError>(service_fn(move |req| {

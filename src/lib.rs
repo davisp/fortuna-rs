@@ -1,7 +1,5 @@
-pub mod http_service;
-pub mod js_engine;
-pub mod js_server;
+pub mod js;
+pub mod server;
 
-pub use js_engine::init as init_v8;
-pub use js_engine::shutdown as shutdown_v8;
-pub use http_service::run_server;
+pub use crate::server::run_server;
+pub use js::init as init_v8;

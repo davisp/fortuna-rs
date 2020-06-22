@@ -19,10 +19,9 @@ use hyper::{
 
 use prost::Message;
 
-use crate::js::JSEnv;
-use crate::js::create_js_env;
-use crate::js::JSCommand;
 use crate::js::JSClient;
+use crate::js::JSCommand;
+use crate::js::JSEnv;
 use crate::js::JSResult;
 
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
@@ -43,17 +42,17 @@ async fn serve(client: JSClient, req: Request<Body>) -> Result<Response<Body>> {
             let resp = client.run(cmd.clone()).await;
             let js_resp = match resp {
                 JSResult::Ok(data) => JsResponse {
-                        status: 0,
-                        result: data
-                    },
+                    status: 0,
+                    result: data
+                },
                 JSResult::Error(data) => JsResponse {
-                        status: 1,
-                        result: data
-                    },
+                    status: 1,
+                    result: data
+                },
                 _ => JsResponse {
-                        status: 1,
-                        result: String::from("unknown error")
-                    }
+                    status: 1,
+                    result: String::from("unknown error")
+                }
             };
 
             let mut resp: Vec<u8> = Vec::new();
@@ -76,7 +75,7 @@ pub async fn run_server(
 
     let make_service = make_service_fn(move |_| {
         let jsenv = jsenv.clone();
-        let client = create_js_env(&jsenv);
+        let client = JSClient::new(&jsenv);
 
         async move {
             Ok::<_, GenericError>(service_fn(move |req| {

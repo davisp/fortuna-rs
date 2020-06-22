@@ -19,27 +19,27 @@ pub mod ateles {
    * map docs
 */
 
-async fn rewrite_map_funs(client: &Client) {
-    let js_req = JsRequest {
-        action: 0,
-        script: "rewriteFun".to_string(),
-        args: vec!["\"function(doc) {emit(doc._id, null);}\"".to_string()],
-        timeout: 5000
-    };
-
-    let mut resp = Vec::<u8>::new();
-    js_req.encode(&mut resp).unwrap();
-
-    let _body = client
-        .post("http://localhost:8444/Ateles/Execute")
-        .body(resp)
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-}
+// async fn rewrite_map_funs(client: &Client) {
+//     let js_req = JsRequest {
+//         action: 0,
+//         script: "rewriteFun".to_string(),
+//         args: vec!["\"function(doc) {emit(doc._id, null);}\"".to_string()],
+//         timeout: 5000
+//     };
+//
+//     let mut resp = Vec::<u8>::new();
+//     js_req.encode(&mut resp).unwrap();
+//
+//     let _body = client
+//         .post("http://localhost:8444/Ateles/Execute")
+//         .body(resp)
+//         .send()
+//         .await
+//         .unwrap()
+//         .text()
+//         .await
+//         .unwrap();
+// }
 
 async fn add_map_js(client: &Client) {
     let js_req = JsRequest {
@@ -107,7 +107,7 @@ async fn map_doc(client: &Client, doc: &str) {
         .unwrap();
 }
 
-#[tokio::main]
+#[tokio::main(core_threads = 4)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
 

@@ -3,7 +3,7 @@ use fortuna::{
     run_server
 };
 
-#[tokio::main(core_threads = 6)]
+#[tokio::main(core_threads = 4)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 

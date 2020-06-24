@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::thread;
+use std::time;
 
 use crossbeam::crossbeam_channel as cbc;
 use rusty_v8 as v8;
@@ -51,7 +52,7 @@ pub struct JSFuture {
 
 pub struct FortunaIsolate {
     isolate: v8::OwnedIsolate,
-    global_context: v8::Global<v8::Context>
+    global: v8::Global<v8::Context>
 }
 
 #[derive(Clone, Default)]
@@ -120,6 +121,7 @@ impl Future for JSFuture {
 impl JSEnv {
     pub fn new() -> Self {
         let startup_data = JSEnv::create_startup_data();
+        println!("Startup Data: {}", startup_data.len());
         JSEnv {
             startup_data: startup_data.to_vec()
         }
@@ -150,14 +152,38 @@ impl JSEnv {
         }
 
         snapshot_creator
-            .create_blob(v8::FunctionCodeHandling::Clear)
+            .create_blob(v8::FunctionCodeHandling::Keep)
             .unwrap()
     }
 }
 
+fn print_callback(
+    scope: v8::FunctionCallbackScope,
+    args: v8::FunctionCallbackArguments,
+    mut rv: v8::ReturnValue,
+) {
+    for i in 0..args.length() {
+        let arg1 = args.get(i).to_string(scope).unwrap();
+        println!("{:?}", arg1.to_rust_string_lossy(scope));
+    }
+    rv.set(v8::Boolean::new(scope, true).into())
+}
+
+fn sleep_callback(
+    scope: v8::FunctionCallbackScope,
+    args: v8::FunctionCallbackArguments,
+    mut rv: v8::ReturnValue,
+) {
+    if args.length() > 0 {
+        if let Some(secs) = args.get(0).number_value(scope) {
+            thread::sleep(time::Duration::from_secs_f64(secs));
+        }
+    }
+    rv.set(v8::Boolean::new(scope, true).into())
+}
+
 impl FortunaIsolate {
     pub fn new_from_snapshot(snapshot: &[u8]) -> Self {
-        let mut global_context = v8::Global::<v8::Context>::new();
         let params = v8::Isolate::create_params();
         let params = params.snapshot_blob(snapshot.to_vec());
         let mut isolate = v8::Isolate::new(params);
@@ -165,13 +191,28 @@ impl FortunaIsolate {
         let mut scope = v8::HandleScope::new(&mut isolate);
         let scope = scope.enter();
 
-        let context = v8::Context::new(scope);
+        let object_templ = v8::ObjectTemplate::new(scope);
 
-        global_context.set(scope, context);
+        let print_cb = v8::FunctionTemplate::new(scope, print_callback);
+        let name = v8::String::new(scope, "print").unwrap();
+        let attr = v8::READ_ONLY + v8::DONT_ENUM + v8::DONT_DELETE;
+        object_templ.set_with_attr(name.into(), print_cb.into(), attr);
+
+        let sleep_cb = v8::FunctionTemplate::new(scope, sleep_callback);
+        let name = v8::String::new(scope, "sleep").unwrap();
+        let attr = v8::READ_ONLY + v8::DONT_ENUM + v8::DONT_DELETE;
+        object_templ.set_with_attr(name.into(), sleep_cb.into(), attr);
+
+        let context = v8::Context::new_from_template(scope, object_templ);
+        let mut cs = v8::ContextScope::new(scope, context);
+        let scope = cs.enter();
+
+        let mut global = v8::Global::<v8::Context>::new();
+        global.set(scope, context);
 
         FortunaIsolate {
             isolate,
-            global_context
+            global: global
         }
     }
 
@@ -184,7 +225,7 @@ impl FortunaIsolate {
         let scope = scope.enter();
 
         let context = self
-            .global_context
+            .global
             .get(scope)
             .ok_or("error getting context")?;
 
@@ -219,7 +260,7 @@ impl FortunaIsolate {
         let scope = scope.enter();
 
         let context = self
-            .global_context
+            .global
             .get(scope)
             .ok_or("error getting context")?;
 

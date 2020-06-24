@@ -185,6 +185,7 @@ function mapEach(mapFun, doc) {
 };
 
 function mapDoc(docJSON) {
+    sleep(0.01);
     const doc = JSON.parse(docJSON);
     const mapResults = Array.from(mapFuns, (mapFun) => {
         return mapEach(mapFun, doc);
